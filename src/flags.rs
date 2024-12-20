@@ -21,7 +21,6 @@ lazy_static! {
         ].into());
 
         m.insert(CMD::DECRYPT, [
-            ("--name",(None,false)),
         ].into());
 
         m.insert(CMD::HELP, [].into());
