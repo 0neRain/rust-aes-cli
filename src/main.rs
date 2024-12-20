@@ -113,7 +113,7 @@ fn parse_args<'a>() -> Result<()> {
                 fs::remove_file(&ctx.target)?;
             }
         },
-        "decypt" | "d"=> {
+        "decrypt" | "d"=> {
             let mut builder= CtxBuilder::new(CMD::DECRYPT);
             parse_decryption_cmd(&mut builder, &args[1..])?; 
 
@@ -133,7 +133,7 @@ fn parse_args<'a>() -> Result<()> {
             write_data(&ctx.target.with_file_name(""),&data)?;
         },
         "help"=> unimplemented!(),
-        _=> return Err(anyhow!("unkown command {}", args[0]))
+        _=> return Err(anyhow!("unknown command {}", args[0]))
     };
 
     Ok(())
@@ -231,7 +231,7 @@ fn read_path_to_plaintext(path: &Path) -> Result<Vec<u8>> {
         }
         
         v.push(b'\n');
-        //len is the length of the file + lenght of file name + 2
+        //len is the length of the file + length of file name + 2
         let len= (v.len() as u64).to_be_bytes();
 
 
