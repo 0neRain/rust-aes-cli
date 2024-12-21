@@ -132,3 +132,47 @@ pub fn is_valid_bool_flag(f: &str, cmd: CMD) -> bool {
 pub fn is_valid_str_flag(f:&str, cmd:CMD) ->bool {
     STR_FLAGS[&cmd].contains_key(f)
 }
+#[cfg(test)]
+mod test {
+    use std::collections::{HashMap, HashSet};
+
+    use super::*;
+    #[test]
+    fn test_default_values() {
+        let mut flags= Flags::new(CMD::ENCRYPT);
+
+        let inserted_str_flags: HashMap<&str, &str>= HashMap::from([("--name", "test")]);
+        let inserted_bool_flags= HashSet::from(["--no-delete"]);
+
+        for (&f,&v) in &inserted_str_flags {
+            flags.set_str_flag(f, v.to_string()).unwrap();
+        }
+        
+        for &f in &inserted_bool_flags {
+            flags.set_bool_flag(f, true).unwrap();
+        }
+
+        flags.check_flags().unwrap();
+        
+        for (&f,v) in &flags.str_flags {
+            //check value is unchanged
+            if inserted_str_flags.contains_key(f) {
+                assert_eq!(inserted_str_flags[f], v);
+            }
+            //check value is set to default  
+            else {
+                let default= STR_FLAGS[&CMD::ENCRYPT][f].clone();
+                if default.is_none() {
+                    assert!(flags.get_str_flag(f).is_none());
+                } else {
+                    assert_eq!(v.clone(), default.unwrap());
+                }
+            }
+        }
+    }
+    
+    // #[test]
+    // fn test_mandatory_values() {
+
+    // }
+}
