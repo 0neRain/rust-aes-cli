@@ -1,4 +1,5 @@
 use std::mem::size_of;
+use std::panic::Location;
 use std::path::Path;
 use std::{fs, io};
 use std::{env, path::PathBuf};
@@ -18,23 +19,24 @@ use flags::{Flags, CMD};
 const NONCE_LENGTH: usize= 12; //bytes
 const KEY_LENGTH: usize=32;
 
-struct Ctx {
+struct Ctx <'f>{
     target :PathBuf,
+    location: PathBuf,
     key: [u8;KEY_LENGTH],
     name: Option<String>,
-    flags: Flags,
+    flags: Flags<'f>,
 }
 
 
-struct CtxBuilder{
+struct CtxBuilder<'f>{
     target: Option<PathBuf>,
     key: Option<[u8;KEY_LENGTH]>,
     cmd: CMD,
 
-    flags: Flags,
+    flags: Flags<'f>,
 }
 
-impl CtxBuilder {
+impl<'f> CtxBuilder <'f>{
     fn new(cmd: CMD) -> Self {
         Self {
             cmd,
@@ -44,7 +46,7 @@ impl CtxBuilder {
         }
     }
 
-    fn build(mut self) -> Result<Ctx> {
+    fn build(mut self) -> Result<Ctx<'f>> {
         let target= match self.target {
             Some(t) =>t,
             None => return Err(anyhow!("missing target")),
@@ -57,17 +59,16 @@ impl CtxBuilder {
 
         self.flags.check_flags()?;
 
-        let name= match self.flags.get_str_flag("--name") {
-            Some(n)=> Some(n.clone()),
-            None=> if self.cmd==CMD::ENCRYPT {
-                Some(target.with_extension("").file_name().unwrap().to_string_lossy().to_string())
-            }else {
-                None
-            },
-        }; 
+        let name= self.flags.get_str_flag("--name").map(|n| n.clone());
         
+        let location:PathBuf= self.flags.get_str_flag("--location").unwrap().into();
+        if !location.is_dir() {
+            return Err(anyhow!("location path {location:?} is not a directory"));
+        }
+
         Ok(Ctx{
             target,
+            location,
             key,
             name,
             flags: self.flags,
@@ -81,7 +82,7 @@ fn main() {
 
 }
 
-fn parse_args<'a>() -> Result<()> {
+fn parse_args() -> Result<()> {
     let args: Vec<String>= env::args().skip(1).collect();
 
     if args.len()==0 {
@@ -92,7 +93,19 @@ fn parse_args<'a>() -> Result<()> {
     match args[0].as_str(){
         "encrypt" |"e" =>{
             let mut builder= CtxBuilder::new(CMD::ENCRYPT);
-            parse_encryption_cmd(&mut builder, &args[1..])?;
+            match args.get(1) {
+                Some(t) => builder.target= Some(t.into()),
+                None => return Err(anyhow!("expected target")),
+            }
+            
+            parse_cmd_flags(&mut builder, &args[2..], CMD::ENCRYPT)?;
+            
+            if builder.flags.get_str_flag("--name").is_none() {
+                builder.flags.set_str_flag("--name", builder.target.as_ref().unwrap().with_extension("").to_string_lossy().into_owned())?;
+            } 
+            if builder.flags.get_str_flag("--location").is_none() {
+                builder.flags.set_str_flag("--location", builder.target.as_ref().unwrap().parent().unwrap().to_string_lossy().to_string())?;
+            } 
 
             let pw=get_password();
 
@@ -107,7 +120,7 @@ fn parse_args<'a>() -> Result<()> {
 
             let cyphertext= encrypt(&ctx,&data)?;
 
-            fs::write( ctx.target.with_file_name(&ctx.name.unwrap()),cyphertext.as_slice()).unwrap();
+            fs::write( ctx.location.join(ctx.name.unwrap()),cyphertext.as_slice()).unwrap();
 
             if !ctx.flags.get_bool_flag("--no-delete").unwrap() {
                 fs::remove_file(&ctx.target)?;
@@ -115,7 +128,17 @@ fn parse_args<'a>() -> Result<()> {
         },
         "decrypt" | "d"=> {
             let mut builder= CtxBuilder::new(CMD::DECRYPT);
-            parse_decryption_cmd(&mut builder, &args[1..])?; 
+
+            match args.get(1) {
+                Some(t) => builder.target= Some(t.into()),
+                None => return Err(anyhow!("expected target")),
+            }
+
+            parse_cmd_flags(&mut builder, &args[1..], CMD::ENCRYPT)?; 
+
+            if builder.flags.get_str_flag("--location").is_none() {
+                builder.flags.set_str_flag("--location", builder.target.as_ref().unwrap().parent().unwrap().to_string_lossy().to_string())?;
+            } 
 
             let pw=get_password();
 
@@ -129,8 +152,8 @@ fn parse_args<'a>() -> Result<()> {
             let data=fs::read(&ctx.target)?;
             
             let data= decrypt(&ctx,&data)?;
-
-            write_data(&ctx.target.with_file_name(""),&data)?;
+            
+            write_data(&ctx.location,&data)?;
         },
         "help"=> unimplemented!(),
         _=> return Err(anyhow!("unknown command {}", args[0]))
@@ -139,57 +162,26 @@ fn parse_args<'a>() -> Result<()> {
     Ok(())
 }
 
-fn parse_encryption_cmd(builder: &mut CtxBuilder, args: &[String]) -> Result<()> {
-    if args.len()==0 {
-        return Err(anyhow!("expected target"))
-    }
-
-    builder.target=Some(PathBuf::from(&args[0]));
-
-    let mut pos=1;
-    while let Some(v) = args.get(pos) {
-        match v.as_str(){
-            "--no-delete"=> builder.flags.set_bool_flag("--no-delete", true)?,
-            "--name" => {
-                pos+=1;
-                match args.get(pos) {
-                    Some(n)=> builder.flags.set_str_flag("--name", n.clone())?,
-                    None=> return Err(anyhow!("expected file name after flag '--name'")),
-                } 
-            }
-            _=> return  Err(anyhow!("unknown flag {}", args[pos]))
+fn parse_cmd_flags<'f>(builder: &mut CtxBuilder<'f>, args: &'f [String], cmd: CMD) -> Result<()> {
+    let mut pos=0;
+    while let Some(_) = args.get(pos) {
+        let flag= &args[pos];
+        if flags::is_valid_bool_flag(flag, cmd) {
+            println!("got bool flag {flag}");
+            builder.flags.set_bool_flag(flag, true)?;
+        } else if flags::is_valid_str_flag(flag, cmd) {
+            pos+=1;
+            let val= match args.get(pos) {
+                Some(v)=> v.clone(),
+                None=> return Err(anyhow!("expected value for flag {}", &args[pos])),
+            };
+            
+            println!("got str flag {flag} value: {val}");
+            builder.flags.set_str_flag(flag, val)?;
         }
 
         pos+=1;
     }
-
-    Ok(())
-}
-
-fn parse_decryption_cmd(builder: &mut CtxBuilder, args: &[String])-> Result<()> {
-    if args.len()==0 {
-        return Err(anyhow!("expected target"))
-    }
-
-    builder.target=Some(PathBuf::from(&args[0]));
-
-    let mut pos=1;
-    while let Some(v) = args.get(pos) {
-        match v.as_str() {
-            "--name" => {
-                pos+=1;
-                match args.get(pos) {
-                    //TODO: don't clone the string
-                    Some(n)=> builder.flags.set_str_flag("--name", n.clone())?,
-                    None=> return Err(anyhow!("expected file name after flag '--name'"))
-                } 
-            },
-            _=> return  Err(anyhow!("unknown flag {}", args[pos]))
-        }
-
-        pos+=1;
-    }
-
     Ok(())
 }
 
@@ -216,7 +208,7 @@ fn generate_key_from_password(pw: &str)-> [u8;KEY_LENGTH] {
 
 fn read_path_to_plaintext(path: &Path) -> Result<Vec<u8>> {
     if !path.exists() {
-        return Err(anyhow!("the path does not exist"))
+        return Err(anyhow!("path '{path:?}' does not exist"))
     }
     
     if path.is_file() {
