@@ -134,14 +134,17 @@ pub fn is_valid_str_flag(f:&str, cmd:CMD) ->bool {
 }
 #[cfg(test)]
 mod test {
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashSet;
 
     use super::*;
     #[test]
     fn test_default_values() {
         let mut flags= Flags::new(CMD::ENCRYPT);
 
-        let inserted_str_flags: HashMap<&str, &str>= HashMap::from([("--name", "test")]);
+        //get all mandatory flags
+        let mandatory_flags:Vec<&str>= STR_FLAGS[&CMD::ENCRYPT].keys().filter(|&&k| STR_FLAGS[&CMD::ENCRYPT][k].is_none()).map(|&k| k).collect();
+
+        let inserted_str_flags: HashMap<&str, &str>= HashMap::from_iter(mandatory_flags.iter().map(|&k| (k,"test")));
         let inserted_bool_flags= HashSet::from(["--no-delete"]);
 
         for (&f,&v) in &inserted_str_flags {
@@ -157,22 +160,39 @@ mod test {
         for (&f,v) in &flags.str_flags {
             //check value is unchanged
             if inserted_str_flags.contains_key(f) {
-                assert_eq!(inserted_str_flags[f], v);
+                assert_eq!(inserted_str_flags[f], v, "inserted value for key {f} was changed to {}", inserted_str_flags[f]);
             }
             //check value is set to default  
             else {
                 let default= STR_FLAGS[&CMD::ENCRYPT][f].clone();
                 if default.is_none() {
-                    assert!(flags.get_str_flag(f).is_none());
+                    assert!(flags.get_str_flag(f).is_none(),"flag {f} has no default value and was not inserted but is not none");
                 } else {
-                    assert_eq!(v.clone(), default.unwrap());
+                    let d= default.unwrap();
+                    assert_eq!(v.clone(), d, "expected default value {d} for flag {f}, got {v}");
                 }
             }
         }
     }
     
-    // #[test]
-    // fn test_mandatory_values() {
+    #[test]
+    fn test_mandatory_values() {
+        let mut flags= Flags::new(CMD::ENCRYPT);
+        //vector of strings that will be referenced by the keys (they must outlive flags)
+        let mandatory_flags: Vec<String>=STR_FLAGS[&CMD::ENCRYPT].keys().filter(|&&k| STR_FLAGS[&CMD::ENCRYPT][k].is_none()).map(|&k| k.to_string()).collect(); 
+        let mut unset_mandatory_flags: HashSet<&str>= HashSet::from_iter(mandatory_flags.iter().map(|x| x.as_str()));
+        
+        while let Err(err) = flags.check_flags() {  
+            let s= err.to_string();
+            assert!(s.starts_with("missing mandatory flag"),"unexpected error");
 
-    // }
+            let flag=s.split_ascii_whitespace().last().unwrap().to_string();
+            assert!(unset_mandatory_flags.contains(flag.as_str()));
+
+            flags.set_str_flag(*unset_mandatory_flags.get(flag.as_str()).unwrap(), "test".into()).unwrap(); 
+            unset_mandatory_flags.remove(flag.as_str());
+        }
+
+        assert!(unset_mandatory_flags.is_empty())
+    }
 }
