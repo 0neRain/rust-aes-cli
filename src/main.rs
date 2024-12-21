@@ -1,5 +1,4 @@
 use std::mem::size_of;
-use std::panic::Location;
 use std::path::Path;
 use std::{fs, io};
 use std::{env, path::PathBuf};
@@ -31,7 +30,6 @@ struct Ctx <'f>{
 struct CtxBuilder<'f>{
     target: Option<PathBuf>,
     key: Option<[u8;KEY_LENGTH]>,
-    cmd: CMD,
 
     flags: Flags<'f>,
 }
@@ -39,7 +37,6 @@ struct CtxBuilder<'f>{
 impl<'f> CtxBuilder <'f>{
     fn new(cmd: CMD) -> Self {
         Self {
-            cmd,
             target: None,
             key: None,
             flags: Flags::new(cmd),
