@@ -160,18 +160,20 @@ mod test {
         for (&f,v) in &flags.str_flags {
             //check value is unchanged
             if inserted_str_flags.contains_key(f) {
-                assert_eq!(inserted_str_flags[f], v, "inserted value for key {f} was changed to {}", inserted_str_flags[f]);
+                assert_eq!(inserted_str_flags[f], v, "Inserted value for key {f} was changed to {}", inserted_str_flags[f]);
             }
             //check value is set to default  
             else {
-                let default= STR_FLAGS[&CMD::ENCRYPT][f].clone();
-                if default.is_none() {
-                    assert!(flags.get_str_flag(f).is_none(),"flag {f} has no default value and was not inserted but is not none");
-                } else {
-                    let d= default.unwrap();
-                    assert_eq!(v.clone(), d, "expected default value {d} for flag {f}, got {v}");
+                match STR_FLAGS[&CMD::ENCRYPT][f] { 
+                    None=> assert!(flags.get_str_flag(f).is_none(),"Flag {f} has no default value and was not inserted, but is set to {}", flags.get_str_flag(f).unwrap()),
+                    Some(d) => assert_eq!(v.clone(), d, "Expected default value {d} for flag {f}. Got {v}"),
                 }
             }
+        }
+
+        for (&f, &v) in &flags.bool_flags {
+            let expected= inserted_bool_flags.contains(f);
+            assert_eq!(flags.bool_flags[f], expected, "expected value {expected} for flag {f}. got {}", !expected);
         }
     }
     
