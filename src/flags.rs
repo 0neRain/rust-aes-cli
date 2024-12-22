@@ -164,9 +164,9 @@ mod test {
             }
             //check value is set to default  
             else {
-                match STR_FLAGS[&CMD::ENCRYPT][f] { 
+                match &STR_FLAGS[&CMD::ENCRYPT][f] { 
                     None=> assert!(flags.get_str_flag(f).is_none(),"Flag {f} has no default value and was not inserted, but is set to {}", flags.get_str_flag(f).unwrap()),
-                    Some(d) => assert_eq!(v.clone(), d, "Expected default value {d} for flag {f}. Got {v}"),
+                    Some(d) => assert_eq!(v, d, "Expected default value {d} for flag {f}. Got {v}"),
                 }
             }
         }
