@@ -9,7 +9,7 @@ Usage Examples:
 1. Encrypt a file: `encrypt file.txt --name encrypted_file`
 2. Decrypt a file: `decrypt encrypted_file`
 
-For more information use `help`
+For more information use `help <command>`
 "#;
 
     pub static ref CMD_HELP: HashMap<&'static str, &'static str>= {
