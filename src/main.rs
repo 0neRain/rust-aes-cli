@@ -174,7 +174,6 @@ fn parse_cmd_flags<'f>(builder: &mut CtxBuilder<'f>, args: &'f [String], cmd: CM
     while let Some(_) = args.get(pos) {
         let flag= &args[pos];
         if flags::is_valid_bool_flag(flag, cmd) {
-            println!("got bool flag {flag}");
             builder.flags.set_bool_flag(flag, true)?;
         } else if flags::is_valid_str_flag(flag, cmd) {
             pos+=1;
@@ -183,7 +182,6 @@ fn parse_cmd_flags<'f>(builder: &mut CtxBuilder<'f>, args: &'f [String], cmd: CM
                 None=> return Err(anyhow!("expected value for flag {}", &args[pos])),
             };
             
-            println!("got str flag {flag} value: {val}");
             builder.flags.set_str_flag(flag, val)?;
         }
 
