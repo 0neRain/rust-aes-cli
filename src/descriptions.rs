@@ -1,8 +1,7 @@
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 
-lazy_static! {
-    pub static ref TOOL_DESCRIPTION:&'static str= r#"
+pub const TOOL_DESCRIPTION:&'static str= r#"
 Simple AES GCM encryption/decryption tool.
 
 Usage Examples:
@@ -12,6 +11,7 @@ Usage Examples:
 For more information use `help <command>`
 "#;
 
+lazy_static! {
     pub static ref CMD_HELP: HashMap<&'static str, &'static str>= {
         let mut m= HashMap::new();
         m.insert("encrypt", r#"

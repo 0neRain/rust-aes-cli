@@ -161,7 +161,7 @@ fn parse_args() -> Result<()> {
                 Some(&s)=> println!("{s}"),
                 None=> return Err(anyhow!("unknown command '{cmd}'")),
             },
-            None=> println!("{}",TOOL_DESCRIPTION.to_string()),
+            None=> println!("{}",TOOL_DESCRIPTION),
         }
         _=> return Err(anyhow!("unknown command {}", args[0]))
     };
