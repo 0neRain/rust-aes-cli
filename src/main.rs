@@ -1,4 +1,5 @@
 use std::mem::size_of;
+use std::os::windows::process;
 use std::path::Path;
 use std::{fs, io};
 use std::{env, path::PathBuf};
@@ -14,6 +15,9 @@ use rand_seeder::Seeder;
 
 mod flags;
 use flags::{Flags, CMD};
+
+mod descriptions;
+use descriptions::*;
 
 const NONCE_LENGTH: usize= 12; //bytes
 const KEY_LENGTH: usize=32;
@@ -152,7 +156,13 @@ fn parse_args() -> Result<()> {
             
             write_data(&ctx.location,&data)?;
         },
-        "help"=> unimplemented!(),
+        "help"=> match args.get(1) {
+            Some(cmd)=> match CMD_HELP.get(cmd.as_str()) {
+                Some(&s)=> println!("{s}"),
+                None=> return Err(anyhow!("unknown command '{cmd}'")),
+            },
+            None=> println!("{}",TOOL_DESCRIPTION.to_string()),
+        }
         _=> return Err(anyhow!("unknown command {}", args[0]))
     };
 
