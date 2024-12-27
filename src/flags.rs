@@ -171,7 +171,7 @@ mod test {
             }
         }
 
-        for (&f, &v) in &flags.bool_flags {
+        for (&f, &_) in &flags.bool_flags {
             let expected= inserted_bool_flags.contains(f);
             assert_eq!(flags.bool_flags[f], expected, "expected value {expected} for flag {f}. got {}", !expected);
         }
