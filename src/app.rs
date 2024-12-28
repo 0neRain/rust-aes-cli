@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 
-use aes_gcm::{AeadCore, Aes256Gcm, KeyInit};
+use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
 use aes_gcm::aead::{Aead, OsRng};
 
 use rand::prelude::*;
@@ -108,7 +108,7 @@ pub fn parse_cmd(args: Vec<String>) -> Result<()> {
             let ctx= builder.build()?;
             let data= read_path_to_plaintext(&ctx.target)?;
 
-            let cyphertext= encrypt(&ctx,&data)?;
+            let cyphertext= encrypt(&ctx.key,&data)?;
 
             fs::write( ctx.location.join(ctx.name.unwrap()),cyphertext.as_slice()).unwrap();
 
@@ -141,7 +141,7 @@ pub fn parse_cmd(args: Vec<String>) -> Result<()> {
             let ctx= builder.build()?;
             let data=fs::read(&ctx.target)?;
             
-            let data= decrypt(&ctx,&data)?;
+            let data= decrypt(&ctx.key,&data)?;
             
             write_data(&ctx.location,&data)?;
         },
@@ -309,8 +309,8 @@ fn write_data(path: &Path, data: &[u8])-> Result<()> {
     Ok(())
 }
 
-fn encrypt(ctx:&Ctx, data: &[u8]) -> Result<Vec<u8>> {
-    let cypher= Aes256Gcm::new  (ctx.key[..].into());
+fn encrypt(key: &[u8;KEY_LENGTH], data: &[u8]) -> Result<Vec<u8>> {
+    let cypher= Aes256Gcm::new(key.into());
     let nonce=Aes256Gcm::generate_nonce(&mut OsRng);
 
 
@@ -324,10 +324,26 @@ fn encrypt(ctx:&Ctx, data: &[u8]) -> Result<Vec<u8>> {
     Ok(cyphertext)
 }
 
-fn decrypt(ctx: &Ctx, data: &[u8]) -> Result<Vec<u8>> {
+fn decrypt(key: &[u8;KEY_LENGTH], data: &[u8]) -> Result<Vec<u8>> {
     let (cyphertext,nonce)= data.split_at(data.len()-NONCE_LENGTH);
 
-    let cypher= Aes256Gcm::new(ctx.key[..].into());
+    let cypher= Aes256Gcm::new(key.into());
 
     cypher.decrypt(nonce.into(),cyphertext).map_err(|_| anyhow!("wrong password"))
+}
+
+#[cfg(test)]
+mod test {
+    use super::{encrypt, generate_key_from_password, decrypt};
+
+    #[test]
+    fn test_encrypt_decrypt() {
+        let data= "test data".as_bytes().to_vec();
+        let key= generate_key_from_password("password");
+
+        let cyphertext= encrypt(&key, data.as_slice()).unwrap();
+        let plaintext= decrypt(&key, &cyphertext).unwrap();
+
+        assert_eq!(data,plaintext);
+    }
 }
