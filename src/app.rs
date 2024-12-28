@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 
-use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit};
+use aes_gcm::{AeadCore, Aes256Gcm, KeyInit};
 use aes_gcm::aead::{Aead, OsRng};
 
 use rand::prelude::*;
@@ -106,7 +106,7 @@ pub fn parse_cmd(args: Vec<String>) -> Result<()> {
             builder.key= Some(generate_key_from_password(&pw));
 
             let ctx= builder.build()?;
-            let data= read_path_to_plaintext(&ctx.target)?;
+            let data= format_path(&ctx.target)?;
 
             let cyphertext= encrypt(&ctx.key,&data)?;
 
@@ -143,7 +143,7 @@ pub fn parse_cmd(args: Vec<String>) -> Result<()> {
             
             let data= decrypt(&ctx.key,&data)?;
             
-            write_data(&ctx.location,&data)?;
+            write_files_from_format(&ctx.location,&data)?;
         },
         "help"=> match args.get(1) {
             Some(cmd)=> match CMD_HELP.get(cmd.as_str()) {
@@ -200,37 +200,21 @@ fn generate_key_from_password(pw: &str)-> [u8;KEY_LENGTH] {
     ret
 }
 
-fn read_path_to_plaintext(path: &Path) -> Result<Vec<u8>> {
+fn format_path(path: &Path) -> Result<Vec<u8>> {
     if !path.exists() {
-        return Err(anyhow!("path '{path:?}' does not exist"))
+        return Err(anyhow!("Path '{path:?}' does not exist"))
     }
     
     if path.is_file() {
-        let mut v=fs::read(path).map_err(|_| anyhow!("failed to read file"))?;
-        let name= path.file_name().unwrap().to_string_lossy();
-    
-        v.reserve(name.len()+ size_of::<u64>()+2);
-    
-        v.push(b'\n');
-        for &c in name.as_bytes() {
-            v.push(c);
-        }
-        
-        v.push(b'\n');
-        //len is the length of the file + length of file name + 2
-        let len= (v.len() as u64).to_be_bytes();
-
-
-        for c in len {
-            v.push(c);
-        }
-        return Ok(v)
+        let data= fs::read(path).map_err(|e|  anyhow!("Failed to read file. Error: {}",e.to_string()))?;
+        return format_file(path.file_name().unwrap().to_str().unwrap(), data);
     }
 
     let mut v: Vec<u8>= Vec::new();
     let mut count:u64=0;
+
     for entry in path.read_dir().unwrap() {
-        let mut res=read_path_to_plaintext(entry.unwrap().path().as_path())?;
+        let mut res=format_path(entry.unwrap().path().as_path())?;
         count+=1;
         v.append(&mut res);   
     }
@@ -254,7 +238,27 @@ fn read_path_to_plaintext(path: &Path) -> Result<Vec<u8>> {
     Ok(v)
 }
 
-fn write_data(path: &Path, data: &[u8])-> Result<()> {
+fn format_file(name: &str, mut data: Vec<u8>) -> Result<Vec<u8>> {
+        data.reserve(name.len()+ size_of::<u64>()+2);
+    
+        data.push(b'\n');
+        for &c in name.as_bytes() {
+            data.push(c);
+        }
+        
+        data.push(b'\n');
+        //len is the length of the file + length of file name + 2
+        let len= (data.len() as u64).to_be_bytes();
+
+
+        for c in len {
+            data.push(c);
+        }
+
+        return Ok(data)
+}
+
+fn write_files_from_format(path: &Path, data: &[u8])-> Result<()> {
     let mut pos= data.len()-1;
     let mut is_dir=false;
 
@@ -285,7 +289,7 @@ fn write_data(path: &Path, data: &[u8])-> Result<()> {
         let p= path.join(name);
         fs::create_dir(&p)?;
         
-        return write_data(&p, &data[..pos])
+        return write_files_from_format(&p, &data[..pos])
     }    
 
     if num==0 {
@@ -304,7 +308,7 @@ fn write_data(path: &Path, data: &[u8])-> Result<()> {
 
     //write other files in the same directory
     if start!=0 {
-        write_data(&path, &data[..start as usize])?
+        write_files_from_format(&path, &data[..start as usize])?
     }
     Ok(())
 }
@@ -334,16 +338,91 @@ fn decrypt(key: &[u8;KEY_LENGTH], data: &[u8]) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 mod test {
-    use super::{encrypt, generate_key_from_password, decrypt};
+    use std::{collections::HashMap, fs, path::{Path, PathBuf}};
+
+    use super::{decrypt, encrypt, generate_key_from_password, format_path, write_files_from_format, KEY_LENGTH};
+    use rand::{distributions::{Alphanumeric, Standard}, Rng};
+    use tempdir::TempDir;
+
+    pub fn new_test_file(base_path: &Path)-> (PathBuf,Vec<u8>)  {
+        let file_path= base_path.join(random_str(10)).with_extension("txt");
+        assert!(!file_path.exists());
+
+        let data=random_bytes();
+        fs::write(&file_path, &data).unwrap();
+
+        (file_path,data)
+    }
+
+    pub fn new_random_password() -> String {
+        random_str(rand::random::<usize>()%KEY_LENGTH+1)
+    }
+
+    fn random_str(len: usize) -> String {
+        rand::thread_rng().sample_iter(&Alphanumeric).take(len).map(|x|char::from(x)).collect()
+    }
+
+    pub fn random_bytes() -> Vec<u8> {
+        let len= rand::random::<usize>()%100;
+        rand::thread_rng().sample_iter(Standard).take(len).collect()
+    }
 
     #[test]
     fn test_encrypt_decrypt() {
-        let data= "test data".as_bytes().to_vec();
-        let key= generate_key_from_password("password");
+        let data= random_bytes();
+        let pw= new_random_password();
+        let key= generate_key_from_password(&pw);
 
         let cyphertext= encrypt(&key, data.as_slice()).unwrap();
         let plaintext= decrypt(&key, &cyphertext).unwrap();
 
         assert_eq!(data,plaintext);
+    }
+
+    #[test]
+    fn test_file_format() {
+        let tmp_dir= TempDir::new(".").unwrap();
+        let base_path= tmp_dir.path();
+        let (file_path,expected)= new_test_file(base_path);
+        
+
+        let plaintext= format_path(&file_path).unwrap();
+        fs::remove_file(&file_path).unwrap();
+        assert!(!file_path.exists());
+
+        write_files_from_format(&base_path, &plaintext).unwrap();
+        assert!(file_path.exists());
+
+        let result= fs::read(&file_path).unwrap();
+        assert_eq!(expected,result);
+
+        tmp_dir.close().unwrap();
+    }
+
+    #[test]
+    fn test_dir_format() {
+        let tmp_dir= TempDir::new(".").unwrap();
+        let base_path= tmp_dir.path();
+
+        let mut expected_file_data= HashMap::new();
+        let dir= base_path.join(random_str(10));
+        fs::create_dir(&dir).unwrap();
+
+        for _ in 0..3 { 
+            let (path, data)=new_test_file(&dir);
+            expected_file_data.insert(path, data);
+        }
+
+        let plaintext= format_path(&dir).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(!dir.exists());
+
+        write_files_from_format(base_path, &plaintext).unwrap();
+        for (ref file, expected) in expected_file_data {
+            assert!(file.exists());
+            assert_eq!(expected,fs::read(file).unwrap());
+        }
+
+        tmp_dir.close().unwrap();
     }
 }
