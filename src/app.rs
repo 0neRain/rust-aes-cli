@@ -337,40 +337,18 @@ fn decrypt(key: &[u8;KEY_LENGTH], data: &[u8]) -> Result<Vec<u8>> {
 }
 
 #[cfg(test)]
-mod test {
-    use std::{collections::HashMap, fs, path::{Path, PathBuf}};
+pub mod test {
+    use std::{collections::HashMap, fs};
 
     use super::{decrypt, encrypt, generate_key_from_password, format_path, write_files_from_format, KEY_LENGTH};
-    use rand::{distributions::{Alphanumeric, Standard}, Rng};
+    use utils::test_utils;
     use tempdir::TempDir;
-
-    pub fn new_test_file(base_path: &Path)-> (PathBuf,Vec<u8>)  {
-        let file_path= base_path.join(random_str(10)).with_extension("txt");
-        assert!(!file_path.exists());
-
-        let data=random_bytes();
-        fs::write(&file_path, &data).unwrap();
-
-        (file_path,data)
-    }
-
-    pub fn new_random_password() -> String {
-        random_str(rand::random::<usize>()%KEY_LENGTH+1)
-    }
-
-    fn random_str(len: usize) -> String {
-        rand::thread_rng().sample_iter(&Alphanumeric).take(len).map(|x|char::from(x)).collect()
-    }
-
-    pub fn random_bytes() -> Vec<u8> {
-        let len= rand::random::<usize>()%100;
-        rand::thread_rng().sample_iter(Standard).take(len).collect()
-    }
+    
 
     #[test]
     fn test_encrypt_decrypt() {
-        let data= random_bytes();
-        let pw= new_random_password();
+        let data= test_utils::random_bytes();
+        let pw= test_utils::new_random_password(KEY_LENGTH);
         let key= generate_key_from_password(&pw);
 
         let cyphertext= encrypt(&key, data.as_slice()).unwrap();
@@ -383,7 +361,7 @@ mod test {
     fn test_file_format() {
         let tmp_dir= TempDir::new(".").unwrap();
         let base_path= tmp_dir.path();
-        let (file_path,expected)= new_test_file(base_path);
+        let (file_path,expected)= test_utils::new_test_file(base_path);
         
 
         let plaintext= format_path(&file_path).unwrap();
@@ -405,11 +383,11 @@ mod test {
         let base_path= tmp_dir.path();
 
         let mut expected_file_data= HashMap::new();
-        let dir= base_path.join(random_str(10));
+        let dir= base_path.join(test_utils::random_str(10));
         fs::create_dir(&dir).unwrap();
 
         for _ in 0..3 { 
-            let (path, data)=new_test_file(&dir);
+            let (path, data)=test_utils::new_test_file(&dir);
             expected_file_data.insert(path, data);
         }
 
