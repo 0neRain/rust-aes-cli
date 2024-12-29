@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path,PathBuf};
 use std::fs;
 
@@ -5,6 +6,8 @@ use rand::distributions::{Alphanumeric, Standard};
 use rand::Rng;
 
 
+//creates a new file in the provided path.
+//panics if the file already exists
 pub fn new_test_file(base_path: &Path)-> (PathBuf,Vec<u8>)  {
     let file_path= base_path.join(random_str(10)).with_extension("txt");
     assert!(!file_path.exists());
@@ -15,8 +18,20 @@ pub fn new_test_file(base_path: &Path)-> (PathBuf,Vec<u8>)  {
     (file_path,data)
 }
 
-pub fn new_random_password(max_len: usize) -> String {
-    random_str(rand::random::<usize>()%max_len+1)
+//creates num files in the provided path
+//panics if a file already exists
+pub fn new_test_files(base_path:&Path, num: usize) -> HashMap<PathBuf, Vec<u8>> {
+    let mut m= HashMap::new();
+    for _ in 0..num {
+        let (file,data)= new_test_file(base_path);
+        m.insert(file, data);
+    }
+
+    m
+}
+
+pub fn new_random_password(len: usize) -> String {
+    random_str(len)
 }
 
 pub fn random_str(len: usize) -> String {

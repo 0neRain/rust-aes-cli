@@ -1,6 +1,7 @@
+use std::io::Read;
 use std::mem::size_of;
 use std::path::Path;
-use std::{fs, io};
+use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
@@ -58,7 +59,7 @@ impl<'f> CtxBuilder <'f>{
         self.flags.check_flags()?;
 
         let name= self.flags.get_str_flag("--name").map(|n| n.clone());
-        
+
         let location:PathBuf= self.flags.get_str_flag("--location").unwrap().into();
         if !location.is_dir() {
             return Err(anyhow!("location path {location:?} is not a directory"));
@@ -74,7 +75,7 @@ impl<'f> CtxBuilder <'f>{
     }
 }
 
-pub fn parse_cmd(args: Vec<String>) -> Result<()> {
+pub fn parse_cmd(args: Vec<String>, in_stream :&mut impl Read) -> Result<()> {
     if args.len()==0 {
         return Err(anyhow!("no command"));
     }
@@ -91,13 +92,13 @@ pub fn parse_cmd(args: Vec<String>) -> Result<()> {
             parse_cmd_flags(&mut builder, &args[2..], CMD::ENCRYPT)?;
             
             if builder.flags.get_str_flag("--name").is_none() {
-                builder.flags.set_str_flag("--name", builder.target.as_ref().unwrap().with_extension("").to_string_lossy().into_owned())?;
+                builder.flags.set_str_flag("--name", builder.target.as_ref().unwrap().with_extension("").file_name().unwrap().to_string_lossy().into_owned())?;
             } 
             if builder.flags.get_str_flag("--location").is_none() {
                 builder.flags.set_str_flag("--location", builder.target.as_ref().unwrap().parent().unwrap().to_string_lossy().to_string())?;
             } 
 
-            let pw=get_password();
+            let pw=get_password(in_stream);
 
             if pw.len()>KEY_LENGTH {
                 return Err(anyhow!("password is too long"))
@@ -109,11 +110,14 @@ pub fn parse_cmd(args: Vec<String>) -> Result<()> {
             let data= format_path(&ctx.target)?;
 
             let cyphertext= encrypt(&ctx.key,&data)?;
-
-            fs::write( ctx.location.join(ctx.name.unwrap()),cyphertext.as_slice()).unwrap();
+            fs::write( ctx.location.join(ctx.name.unwrap()).with_extension("e"),cyphertext.as_slice()).unwrap();
 
             if !ctx.flags.get_bool_flag("--no-delete").unwrap() {
-                fs::remove_file(&ctx.target)?;
+                if ctx.target.is_dir() {
+                    fs::remove_dir_all(&ctx.target)?;
+                } else {
+                    fs::remove_file(&ctx.target)?;
+                }
             }
         },
         "decrypt" | "d"=> {
@@ -130,7 +134,7 @@ pub fn parse_cmd(args: Vec<String>) -> Result<()> {
                 builder.flags.set_str_flag("--location", builder.target.as_ref().unwrap().parent().unwrap().to_string_lossy().to_string())?;
             } 
 
-            let pw=get_password();
+            let pw=get_password(in_stream);
 
             if pw.len()>KEY_LENGTH {
                 return Err(anyhow!("password is too long"))
@@ -179,11 +183,11 @@ fn parse_cmd_flags<'f>(builder: &mut CtxBuilder<'f>, args: &'f [String], cmd: CM
     Ok(())
 }
 
-fn get_password() -> String {
+fn get_password(stream: &mut impl Read) -> String {
     println!("password:");
 
     let mut pw= String::new();
-    io::stdin().read_line(&mut pw).expect("expected password");
+    stream.read_to_string(&mut pw).expect("expected password");
 
     pw.trim().into()
 }
@@ -202,7 +206,7 @@ fn generate_key_from_password(pw: &str)-> [u8;KEY_LENGTH] {
 
 fn format_path(path: &Path) -> Result<Vec<u8>> {
     if !path.exists() {
-        return Err(anyhow!("Path '{path:?}' does not exist"))
+        return Err(anyhow!("Path {path:?} does not exist"))
     }
     
     if path.is_file() {
@@ -338,9 +342,9 @@ fn decrypt(key: &[u8;KEY_LENGTH], data: &[u8]) -> Result<Vec<u8>> {
 
 #[cfg(test)]
 pub mod test {
-    use std::{collections::HashMap, fs};
+    use std::fs;
 
-    use super::{decrypt, encrypt, generate_key_from_password, format_path, write_files_from_format, KEY_LENGTH};
+    use super::{decrypt, encrypt, generate_key_from_password, format_path, write_files_from_format};
     use utils::test_utils;
     use tempdir::TempDir;
     
@@ -348,7 +352,7 @@ pub mod test {
     #[test]
     fn test_encrypt_decrypt() {
         let data= test_utils::random_bytes();
-        let pw= test_utils::new_random_password(KEY_LENGTH);
+        let pw= test_utils::new_random_password(10);
         let key= generate_key_from_password(&pw);
 
         let cyphertext= encrypt(&key, data.as_slice()).unwrap();
@@ -382,14 +386,10 @@ pub mod test {
         let tmp_dir= TempDir::new(".").unwrap();
         let base_path= tmp_dir.path();
 
-        let mut expected_file_data= HashMap::new();
         let dir= base_path.join(test_utils::random_str(10));
         fs::create_dir(&dir).unwrap();
 
-        for _ in 0..3 { 
-            let (path, data)=test_utils::new_test_file(&dir);
-            expected_file_data.insert(path, data);
-        }
+        let expected_file_data=test_utils::new_test_files(&dir,3);
 
         let plaintext= format_path(&dir).unwrap();
         fs::remove_dir_all(&dir).unwrap();
