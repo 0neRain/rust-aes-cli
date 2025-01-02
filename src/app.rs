@@ -109,7 +109,9 @@ pub fn parse_cmd(args: Vec<String>, in_stream :&mut impl Read) -> Result<()> {
             let data= format_path(&ctx.target)?;
 
             let cyphertext= encrypt(&ctx.key,&data)?;
-            if let Err(e) = fs::write( ctx.location.join(ctx.name.as_ref().unwrap()).with_extension("e"),cyphertext.as_slice()) {
+
+            let path=ctx.location.join(ctx.name.as_ref().unwrap()).with_extension("e");
+            if let Err(e) = fs::write(&path,cyphertext.as_slice()) {
                 let msg = match e.kind() {
                     std::io::ErrorKind::NotFound=> {
                         if ctx.location.exists() {
@@ -122,8 +124,8 @@ pub fn parse_cmd(args: Vec<String>, in_stream :&mut impl Read) -> Result<()> {
                 };
 
                 return Err(msg);
-            }
-
+            };
+            
             if !ctx.flags.get_bool_flag("--no-delete").unwrap() {
                 if ctx.target.is_dir() {
                     fs::remove_dir_all(&ctx.target)?;
