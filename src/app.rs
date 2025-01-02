@@ -59,7 +59,6 @@ impl<'f> CtxBuilder <'f>{
         self.flags.check_flags()?;
 
         let name= self.flags.get_str_flag("--name").map(|n| n.clone());
-
         let location:PathBuf= self.flags.get_str_flag("--location").unwrap().into();
         if !location.is_dir() {
             return Err(anyhow!("location path {location:?} is not a directory"));
@@ -110,7 +109,20 @@ pub fn parse_cmd(args: Vec<String>, in_stream :&mut impl Read) -> Result<()> {
             let data= format_path(&ctx.target)?;
 
             let cyphertext= encrypt(&ctx.key,&data)?;
-            fs::write( ctx.location.join(ctx.name.unwrap()).with_extension("e"),cyphertext.as_slice()).unwrap();
+            if let Err(e) = fs::write( ctx.location.join(ctx.name.as_ref().unwrap()).with_extension("e"),cyphertext.as_slice()) {
+                let msg = match e.kind() {
+                    std::io::ErrorKind::NotFound=> {
+                        if ctx.location.exists() {
+                            anyhow!("invalid file name {}",ctx.name.unwrap())
+                        } else {
+                            anyhow!("invalid location {}",ctx.location.to_str().unwrap())                            
+                        }
+                    }
+                    _=> anyhow!("{}",e.to_string()),
+                };
+
+                return Err(msg);
+            }
 
             if !ctx.flags.get_bool_flag("--no-delete").unwrap() {
                 if ctx.target.is_dir() {
