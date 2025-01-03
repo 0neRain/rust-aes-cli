@@ -231,34 +231,29 @@ fn test_invalid_name_flag() {
     tempdir.close().unwrap();
 }
 
-// #[test]
-// fn test_corrupted_file() {
-//     let tempdir= TempDir::new(".").unwrap();
-//     let path= tempdir.path();
+#[test]
+fn test_corrupted_file() {
+    let tempdir= TempDir::new(".").unwrap();
+    let path= tempdir.path();
 
-//     let (file, file_content)= test_utils::new_test_file(path);
-//     let encrypted_file=file.with_extension("e");
+    let (file, _)= test_utils::new_test_file(path);
+    let encrypted_file=file.with_extension("e");
 
-//     let encryption_cmd= vec!["e".to_string(), file.to_str().unwrap().to_string()];
-//     let password= test_utils::new_random_password(10);
-//     parse_cmd(encryption_cmd, &mut password.as_bytes()).unwrap();
+    let encryption_cmd= vec!["e".to_string(), file.to_str().unwrap().to_string()];
+    let password= test_utils::new_random_password(10);
+    parse_cmd(encryption_cmd, &mut password.as_bytes()).unwrap();
 
-//     //change the file
-//     let mut data= fs::read(&encrypted_file).unwrap();
-//     assert!(data.len()>0, "encrypted file is empty");
-//     let i=rand::random::<usize>()%data.len();
-//     data[i] = match data[i]==0 {
-//         true=> 1,
-//         false=> 0, 
-//     };
-//     fs::write(&encrypted_file, &data).unwrap();
+    //change the file
+    let mut data= fs::read(&encrypted_file).unwrap();
+    assert!(data.len()>0, "encrypted file is empty");
+    let i=rand::random::<usize>()%data.len();
+    data[i] = match data[i]==0 {
+        true=> 1,
+        false=> 0, 
+    };
+    fs::write(&encrypted_file, &data).unwrap();
     
-//     let decryption_cmd= vec!["d".to_string(), encrypted_file.to_str().unwrap().to_string()];
-//     if let Err(e)= parse_cmd(decryption_cmd, &mut password.as_bytes()){
-//         println!("Decryption failed as expected with error: {e:?}");
-//         return;
-//     };
-
-//     assert_ne!(file_content, fs::read(file).unwrap(), "File was successfully decrypted somehow (wtf)");
-//     tempdir.close().unwrap();
-// }
+    let decryption_cmd= vec!["d".to_string(), encrypted_file.to_str().unwrap().to_string()];
+    assert!(parse_cmd(decryption_cmd, &mut password.as_bytes()).is_err(), "got no error");
+    tempdir.close().unwrap();
+}
