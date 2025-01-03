@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use encryption_cli::app::parse_cmd;
 use tempdir::TempDir;
@@ -6,7 +6,7 @@ use utils::test_utils;
 
 #[test] 
 fn test_encrypt_file() {
-    let tempdir= TempDir::new(".").unwrap();
+    let tempdir= TempDir::new("").unwrap();
     let path= tempdir.path();
 
     let (file, expected)= test_utils::new_test_file(path);
@@ -32,7 +32,7 @@ fn test_encrypt_file() {
 
 #[test]
 fn test_encrypt_dir() {
-    let tempdir= TempDir::new(".").unwrap();
+    let tempdir= TempDir::new("").unwrap();
     let path= tempdir.path();
     let base_path= path.join(test_utils::random_str(10)); 
     let expected_encrypted_file= base_path.with_extension("e");
@@ -62,15 +62,203 @@ fn test_encrypt_dir() {
 
 #[test]
 fn test_location_flag() {
+    let tempdir=TempDir::new("").unwrap();
+    let path= tempdir.path();
+    let (file,_)= test_utils::new_test_file(path);
+
+    let location_dir=path.join(test_utils::random_str(10));
+    fs::create_dir(&location_dir).unwrap();
+
+    let expected_encrypted_file= location_dir.join(file.with_extension("e").file_name().unwrap());
+
+    let cmd= vec!["e".to_string(), file.to_str().unwrap().to_string(),"--location".to_string(), location_dir.to_str().unwrap().to_string()];
+    let pw= test_utils::new_random_password(10);
+    parse_cmd(cmd, &mut pw.as_bytes()).unwrap();
+
+    assert!(expected_encrypted_file.exists(),"encrypted file not found");
+
+    let location_dir= path.join(test_utils::random_str(10));
+    fs::create_dir(&location_dir).unwrap();
+    let expected_decrypted_file= location_dir.join(file.file_name().unwrap());
+
+    let cmd= vec!["d".to_string(), expected_encrypted_file.to_str().unwrap().to_string(),"--location".to_string(), location_dir.to_str().unwrap().to_string()];
+    parse_cmd(cmd, &mut pw.as_bytes()).unwrap();
+    
+    assert!(expected_decrypted_file.exists(),"decrypted file not found");
+    tempdir.close().unwrap();
+}
+
+#[test]
+fn test_relative_paths() {
+    let tempdir=TempDir::new("").unwrap();
+    let path= tempdir.path();
+
+    let start_cd= std::env::current_dir().unwrap();
+    std::env::set_current_dir(path).unwrap();
+
+    let (file,_)= test_utils::new_test_file(path);
+    let relative_file_path= Path::new(".").join(file.file_name().unwrap());
+
+    let dir_name=test_utils::random_str(10);
+    let location_dir=path.join(&dir_name);
+    fs::create_dir(&location_dir).unwrap();
+
+
+    let relative_location= format!(".\\{}", &dir_name);
+    let expected_encrypted_file= location_dir.join(file.with_extension("e").file_name().unwrap());
+
+    let cmd= vec!["e".to_string(), relative_file_path.to_str().unwrap().to_string(),"--location".to_string(), relative_location.clone()];
+    let pw= test_utils::new_random_password(10);
+    parse_cmd(cmd, &mut pw.as_bytes()).unwrap();
+
+    assert!(expected_encrypted_file.exists(),"encrypted file not found");
+
+    let dir_name= test_utils::random_str(10);
+    let location_dir= path.join(&dir_name);
+    fs::create_dir(&location_dir).unwrap(); 
+
+    let relative_encrypted_file_path= Path::new(&relative_location).join(expected_encrypted_file.file_name().unwrap());
+    let relative_location=format!(".\\{}",&dir_name);
+    let expected_decrypted_file=location_dir.join(file.file_name().unwrap());
+    
+    let cmd=vec!["d".to_string(), relative_encrypted_file_path.to_str().unwrap().to_string(), "--location".to_string(), relative_location];
+    parse_cmd(cmd, &mut pw.as_bytes()).unwrap();
+
+    assert!(expected_decrypted_file.exists(), "decrypted file not found");
+
+    std::env::set_current_dir(start_cd).unwrap();
+    tempdir.close().unwrap(); 
+}
+
+#[test]
+fn test_encrypt_invalid_location() {
+    let tempdir=TempDir::new("").unwrap();
+    let path= tempdir.path();
+    let (file,_)= test_utils::new_test_file(path);
+
+    let location_dir=path.join(test_utils::random_str(10));
+
+    let cmd= vec!["e".to_string(), file.to_str().unwrap().to_string(),"--location".to_string(), location_dir.to_str().unwrap().to_string()];
+    let pw= test_utils::new_random_password(10);
+
+    assert!(parse_cmd(cmd, &mut pw.as_bytes()).is_err(),"expected error");
+    assert!(!location_dir.exists(),"the program created the directory");
+
+    tempdir.close().unwrap();
+}
+
+#[test] 
+fn test_decrypt_invalid_location() {
+    let tempdir=TempDir::new("").unwrap();
+    let path= tempdir.path();
+    let (file,_)= test_utils::new_test_file(path);
+
+    let location_dir=path.join(test_utils::random_str(10));
+    fs::create_dir(&location_dir).unwrap();
+
+    let expected_encrypted_file= location_dir.join(file.with_extension("e").file_name().unwrap());
+
+    let cmd= vec!["e".to_string(), file.to_str().unwrap().to_string(),"--location".to_string(), location_dir.to_str().unwrap().to_string()];
+    let pw= test_utils::new_random_password(10);
+    parse_cmd(cmd, &mut pw.as_bytes()).unwrap();
+
+    assert!(expected_encrypted_file.exists(),"encrypted file not found");
+
+    let location_dir= path.join(test_utils::random_str(10));
+
+    let cmd= vec!["d".to_string(), expected_encrypted_file.to_str().unwrap().to_string(),"--location".to_string(), location_dir.to_str().unwrap().to_string()];
+
+    assert!(parse_cmd(cmd, &mut pw.as_bytes()).is_err(),"expected error");
+    assert!(!location_dir.exists(), "the program created the directory");    
+    tempdir.close().unwrap();
 
 }
 
 #[test]
 fn test_no_delete_flag() {
+    let tempdir= TempDir::new("").unwrap();
+    let path= tempdir.path();
 
+    let (file, _)= test_utils::new_test_file(path);
+
+    let cmd= vec!["e".to_string(), file.to_str().unwrap().to_string(), "--no-delete".to_string()];
+    let pw= test_utils::new_random_password(10);
+    parse_cmd(cmd, &mut pw.as_bytes()).unwrap();
+
+    assert!(file.exists(), "file was deleted");
+
+    let cmd= vec!["e".to_string(), file.to_str().unwrap().to_string()];
+    parse_cmd(cmd, &mut pw.as_bytes()).unwrap();
+    
+    assert!(!file.exists(), "file was not deleted");
+
+    tempdir.close().unwrap();
 }
 
 #[test]
 fn test_name_flag() {
-    
+    let tempdir= TempDir::new("").unwrap();
+    let path= tempdir.path();
+
+    let (file, _)= test_utils::new_test_file(path);
+    let name= test_utils::random_str(10);
+    let expected_file= path.join(&name).with_extension("e");
+
+    let cmd= vec!["e".to_string(), file.to_str().unwrap().to_string(), "--name".to_string(), name.clone()];
+    let pw= test_utils::new_random_password(10);
+    parse_cmd(cmd, &mut pw.as_bytes()).unwrap();
+
+    assert!(expected_file.exists(),"file with name '{}' not found",&name);
+
+    tempdir.close().unwrap();
 }
+
+#[test]
+fn test_invalid_name_flag() {
+    let tempdir= TempDir::new("").unwrap();
+    let path= tempdir.path();
+
+    let (file, _)= test_utils::new_test_file(path);
+    let mut name= test_utils::random_str(10);
+    name.push_str("/test");
+
+    let cmd= vec!["e".to_string(), file.to_str().unwrap().to_string(), "--name".to_string(), name.clone()];
+    let pw= test_utils::new_random_password(10);
+    let res= parse_cmd(cmd, &mut pw.as_bytes());
+
+    assert!(res.is_err(), "expected error");
+
+    tempdir.close().unwrap();
+}
+
+// #[test]
+// fn test_corrupted_file() {
+//     let tempdir= TempDir::new(".").unwrap();
+//     let path= tempdir.path();
+
+//     let (file, file_content)= test_utils::new_test_file(path);
+//     let encrypted_file=file.with_extension("e");
+
+//     let encryption_cmd= vec!["e".to_string(), file.to_str().unwrap().to_string()];
+//     let password= test_utils::new_random_password(10);
+//     parse_cmd(encryption_cmd, &mut password.as_bytes()).unwrap();
+
+//     //change the file
+//     let mut data= fs::read(&encrypted_file).unwrap();
+//     assert!(data.len()>0, "encrypted file is empty");
+//     let i=rand::random::<usize>()%data.len();
+//     data[i] = match data[i]==0 {
+//         true=> 1,
+//         false=> 0, 
+//     };
+//     fs::write(&encrypted_file, &data).unwrap();
+    
+//     let decryption_cmd= vec!["d".to_string(), encrypted_file.to_str().unwrap().to_string()];
+//     if let Err(e)= parse_cmd(decryption_cmd, &mut password.as_bytes()){
+//         println!("Decryption failed as expected with error: {e:?}");
+//         return;
+//     };
+
+//     assert_ne!(file_content, fs::read(file).unwrap(), "File was successfully decrypted somehow (wtf)");
+//     tempdir.close().unwrap();
+// }
