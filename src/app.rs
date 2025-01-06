@@ -265,7 +265,7 @@ fn format_file(name: &str, mut data: Vec<u8>) -> Result<Vec<u8>> {
         }
         
         data.push(b'\n');
-        //len is the length of the file + length of file name + 2
+        //len= length of the file + length of file name + 2 NL
         let len= (data.len() as u64).to_be_bytes();
 
 
@@ -313,7 +313,7 @@ fn write_files_from_format(path: &Path, data: &[u8])-> Result<()> {
     if num==0 {
         return Err(anyhow!("empty file and name"));
     }
-
+        
     let start= end as u64 + 1 - num;
     if start <0{
         return Err(anyhow!("wrong file format"));
