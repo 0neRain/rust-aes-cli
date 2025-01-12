@@ -222,7 +222,8 @@ fn format_path(path: &Path) -> Result<Vec<u8>> {
     if !path.exists() {
         return Err(anyhow!("Path {path:?} does not exist"))
     }
-    
+
+    println!("got file with name: {:?}", path.file_name().unwrap()); 
     if path.is_file() {
         let data= fs::read(path).map_err(|e|  anyhow!("Failed to read file. Error: {}",e.to_string()))?;
         return format_file(path.file_name().unwrap().to_str().unwrap(), data);
@@ -238,7 +239,7 @@ fn format_path(path: &Path) -> Result<Vec<u8>> {
     }
 
     let dir_name= path.file_name().unwrap().to_string_lossy();
-     
+    
     v.reserve(dir_name.len() + size_of::<u64>() + 3);
     v.push(b'\n');
     for &c in  dir_name.as_bytes() {
@@ -276,7 +277,7 @@ fn format_file(name: &str, mut data: Vec<u8>) -> Result<Vec<u8>> {
         return Ok(data)
 }
 
-fn write_files_from_format(path: &Path, data: &[u8])-> Result<()> {
+fn write_files_from_format(path: &Path, data: &[u8])-> Result<usize> {
     let mut pos= data.len()-1;
     let mut is_dir=false;
 
@@ -307,28 +308,27 @@ fn write_files_from_format(path: &Path, data: &[u8])-> Result<()> {
         let p= path.join(name);
         fs::create_dir(&p)?;
         
-        return write_files_from_format(&p, &data[..pos])
+        for _ in 0..num {
+            pos-=write_files_from_format(&p, &data[..pos])?;
+        }
+    } else {    
+        if num==0 {
+            return Err(anyhow!("empty file and name"));
+        }
+    
+        let start= end as u64 + 1 - num;
+        if start <0{
+            return Err(anyhow!("wrong file format"));
+        }
+        
+        let file_data= &data[start as usize..pos];
+        pos= start as usize;
+        let file_path= path.join(name);
+        
+        fs::write(file_path, file_data)?;
     }    
 
-    if num==0 {
-        return Err(anyhow!("empty file and name"));
-    }
-        
-    let start= end as u64 + 1 - num;
-    if start <0{
-        return Err(anyhow!("wrong file format"));
-    }
-
-    let file_data= &data[start as usize..pos];
-    let file_path= path.join(name);
-
-    fs::write(file_path, file_data)?;
-
-    //write other files in the same directory
-    if start!=0 {
-        write_files_from_format(&path, &data[..start as usize])?
-    }
-    Ok(())
+    Ok(data.len()-pos)
 }
 
 fn encrypt(key: &[u8;KEY_LENGTH], data: &[u8]) -> Result<Vec<u8>> {
