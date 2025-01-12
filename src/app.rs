@@ -223,7 +223,6 @@ fn format_path(path: &Path) -> Result<Vec<u8>> {
         return Err(anyhow!("Path {path:?} does not exist"))
     }
 
-    println!("got file with name: {:?}", path.file_name().unwrap()); 
     if path.is_file() {
         let data= fs::read(path).map_err(|e|  anyhow!("Failed to read file. Error: {}",e.to_string()))?;
         return format_file(path.file_name().unwrap().to_str().unwrap(), data);
