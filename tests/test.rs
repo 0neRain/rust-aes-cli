@@ -61,6 +61,50 @@ fn test_encrypt_dir() {
 }
 
 #[test]
+fn test_encrypt_nested_dir() {
+    let tempdir= TempDir::new("").unwrap();
+    let path= tempdir.path();
+    
+    let dir= path.join(test_utils::random_str(10));
+    let inner_dir= dir.join(test_utils::random_str(10));
+    fs::create_dir_all(&inner_dir).unwrap();
+    
+    let (outer_file, outer_file_data)= test_utils::new_test_file(&dir);
+    let (inner_file,inner_file_data )=test_utils::new_test_file(&inner_dir);
+    
+    let expected_file= path.join(dir.with_extension("e").file_name().unwrap());
+
+    println!("outer file path: {outer_file:?}");
+    println!("inner file path: {inner_file:?}");
+
+    let pw= test_utils::new_random_password(10);
+    let encrypt_cmd= vec!["e".into(), dir.to_str().unwrap().to_string()];
+    parse_cmd(encrypt_cmd, &mut pw.as_bytes()).unwrap();
+    
+    assert!(!dir.exists(), "files were not deleted");
+    assert!(expected_file.exists(), "encrypted file not found");
+
+    let decrypt_cmd= vec!["d".into(), expected_file.to_str().unwrap().to_string()];
+    parse_cmd(decrypt_cmd, &mut pw.as_bytes()).unwrap();
+
+    assert!(dir.exists(), "outer directory not found");
+
+    assert!(inner_dir.exists(),"inner directory not found");
+    assert!(outer_file.exists(),"outer file not found");
+    
+    let outer_entries=dir.read_dir().unwrap().count();
+    assert_eq!( outer_entries, 2,"expected 2 entries in the outer directory. Got {outer_entries}");
+    assert_eq!(fs::read(outer_file).unwrap(), outer_file_data, "wrong outer file content");
+
+    assert!(inner_file.exists());
+    let inner_entries=inner_dir.read_dir().unwrap().count();
+    assert_eq!(inner_entries, 1, "expected 1 entry in the inner directory. Got {inner_entries}");
+    assert_eq!(fs::read(inner_file).unwrap(), inner_file_data, "wrong inner file content");
+
+    tempdir.close().unwrap();
+}
+
+#[test]
 fn test_location_flag() {
     let tempdir=TempDir::new("").unwrap();
     let path= tempdir.path();
