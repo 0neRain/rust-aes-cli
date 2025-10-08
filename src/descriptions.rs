@@ -15,8 +15,8 @@ lazy_static! {
     pub static ref CMD_HELP: HashMap<&'static str, &'static str>= {
         let mut m= HashMap::new();
         m.insert("encrypt", r#"
-Encrypt file or directory. 
-Syntax : encrypt <path> <flags>
+Encrypt a file or a directory. 
+Syntax : encrypt <path> [flags]
 
 
 Flags:
@@ -29,8 +29,8 @@ Flags:
         m.insert("e", r#"
 Alias for the 'encrypt' command.
 
-Encrypt a file or directory.
-Syntax: e <path> <flags>
+Encrypt a file or a directory.
+Syntax: e <path> [flags]
 
 Flags:
 --name:         Specify the name of the encrypted file. If not set, the name will default to the name of the starting file or directory.
@@ -41,7 +41,7 @@ Flags:
 
         m.insert("decrypt", r#"
 decrypt an encrypted file or directory.
-Syntax: decrypt <path> <flags>
+Syntax: decrypt <path> [flags]
 
 Flags:
 --location:   Specify the path where the decrypted file will be created.
@@ -51,7 +51,7 @@ Flags:
 Alias for the 'decrypt' command.
 
 Decrypt an encrypted file or directory.
-Syntax: d <path> <flags>
+Syntax: d <path> [flags]
 
 Flags:
 --location:     Specify the path where the decrypted file will be created.
